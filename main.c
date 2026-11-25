@@ -75,9 +75,11 @@ int main(void) {
             // if there are no syntactic errors, create a parser and parse the command
             Parser *p = createParser(first);
             PToken *op = parseList(p, 0);
+            if (op == NULL) {
+                continue;
+            }
             
-            int exitstatus = execute(op, m, NULL, NULL);
-            printf("Exit status: %d\n", exitstatus);
+            execute(op, m, NULL, NULL);
 
             freeParser(p);
             freePToken(op);

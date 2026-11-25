@@ -59,7 +59,7 @@ Token *peek(Parser *p);
 
 void reset(Parser *p, int start);
 
-void parseRedirection(Parser *p, PToken **out);
+int parseRedirection(Parser *p, PToken **out);
 
 PToken *parseCommand(Parser *p, int start);
 

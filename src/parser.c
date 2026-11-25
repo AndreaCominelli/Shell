@@ -194,7 +194,7 @@ void addRedirToToken(PToken *t, Redir *r) {
     }
 }
 
-void parseRedirection(Parser *p, PToken **out)
+int parseRedirection(Parser *p, PToken **out)
 {
     Token *op = peek(p);
     
@@ -207,26 +207,31 @@ void parseRedirection(Parser *p, PToken **out)
         r = createRedir(REDIR_OUT);
     } else {
         fprintf(stderr, "Error at token %d: unrecognised redirection operator '%s'.\n", p->index, op->val.str);
-        exit(1);
+        goto error;
     }
 
     advance(p);
     Token *word = peek(p);
     if (word->type != TYPE_WORD){
         fprintf(stderr, "Error at token %d: '%s' is not a valid word.\n", p->index, word->val.str);
-        exit(1);
+        return 2;
     }
 
     r->target = xstrdup(word->val.str); // TODO: allocate memory, need to clean in free parser
     // r->target[word->val.len] = 0;
 
     addRedirToToken(*out, r);
+    return 0;
+
+error:
+    freeRedir(r);
+    return 1;
 }
 
 PToken *parseCommand(Parser *p, int start)
 {
     if (p == NULL || start < 0) {
-        exit(1); // 
+        exit(1);
     }
     // count how many argv in the command
     size_t size = 0;
@@ -235,10 +240,10 @@ PToken *parseCommand(Parser *p, int start)
         advance(p);
     }
 
-    reset(p, start); // reset index to 0
+    reset(p, start); // reset index to start
     if(size == 0) {
         fprintf(stderr, "Error at token %d: '%s' is not a valid word.\n", p->index, peek(p)->val.str);
-        exit(1);
+        return NULL;
     }
 
     int index = 0;
@@ -261,18 +266,32 @@ PToken *parseCommand(Parser *p, int start)
         strcmp(peek(p)->val.str, ">") == 0 ||
         strcmp(peek(p)->val.str, "<") == 0
     )){
-        parseRedirection(p, &ptoken);
+        int res = parseRedirection(p, &ptoken);
+        if (res != 0) {
+            goto error;
+        }
         advance(p);
     };
 
     return ptoken;
+
+error:
+    freePToken(ptoken);
+    return NULL;
 }
 
 PToken *parsePipeline(Parser *p, int start) {
     PToken *left = parseCommand(p, start);
+    if (left == NULL) {
+        return NULL;
+    }
     while(peek(p)->type == TYPE_OPERATOR && strcmp(peek(p)->val.str, "|") == 0) {
         advance(p);
         PToken *right = parseCommand(p, p->index);
+        if (right == NULL) {
+            return NULL;
+        }
+
         PToken *op = createOPToken("|");
 
         op->op.left = left;
@@ -285,6 +304,9 @@ PToken *parsePipeline(Parser *p, int start) {
 
 PToken *parseList(Parser *p, int start) {
     PToken *left = parsePipeline(p, start);
+    if (left == NULL) {
+        return NULL;
+    }
      while(
         peek(p)->type == TYPE_OPERATOR &&
         (strcmp(peek(p)->val.str, ";") == 0 ||
@@ -296,6 +318,9 @@ PToken *parseList(Parser *p, int start) {
         advance(p);
 
         PToken *right = parsePipeline(p, p->index);
+        if (right == NULL) {
+            return NULL;
+        }
         PToken *op = createOPToken(symbol);
 
         op->op.left = left;
